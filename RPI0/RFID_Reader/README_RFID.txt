@@ -1,0 +1,1 @@
+SPI-Py and enclosed folder MFRC522-python are packages found to read and write to RFID cards. Currently the only change made has been to Read.py in MFRC522-python so that the RFID cards ID's are published to the MQTT broker on topic 'sensors/RFID/raw', here they are processed further by a script on the Pi 4 reciever. Read.py runs on boot of the Pi Zero, from '/etc/rc.local'. 

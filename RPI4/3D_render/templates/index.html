@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+   <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <title>Data Visualization</title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+        <style>
+           @font-face { font-family: Delicious; src: url('simplifica.ttf'); } 
+           body {background-color: rgb(196,28,89)}
+           h1 { font-family: Delicious, Verdana, Geneva, Tahoma, sans-serif; color:white}
+           h3 { font-family: Delicious, Verdana, Geneva, Tahoma, sans-serif; color:white}
+	   h4 { font-family: Delicious, Verdana, Geneva, Tahoma, sans-serif; color:white}
+          body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+          }
+
+          #renderer {
+            -webkit-box-shadow: 0 8px 6px -6px black;
+	          -moz-box-shadow: 0 8px 6px -6px black;
+	          box-shadow: 0 8px 6px -6px black;
+          }
+
+
+        </style>
+
+    </head>
+    <body>
+      <div class="container">
+        <div class="row">
+          <div class="col-sm-12">
+            <h1 class="text-center">DATA VISUALIZATION</h1>
+            <h3 id="connecting">CONNECTING...</h3>
+            <div class="col-sm-12" id="renderer">
+            </div>
+          </div>
+        </div>
+        <div class="row" id="controls">
+          <div class="col-sm-4">
+            <h4>Heading = <span id="heading">0</span>; Roll = <span id="roll">0</span>; <span id="pitch">0</span></h4>
+          <div class="col-sm-4">
+            <form>
+              <div class="form-group">
+                <button type="button" class="btn btn-primary" id="straighten">Straighten</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <script src="{{ url_for('static', filename='js/jquery-2.1.4.min.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/three.min.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/DDSLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/MTLLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/OBJMTLLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/OBJLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/STLLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
+      <script>
+      $(document).ready(function() {
+        // Configuration
+        // Set size of the WebGL renderer scene.
+        var sceneWidth = 1125;
+        var sceneHeight = 600;
+        // with the model instance and should add a model property with a Three.js
+        // scene graph object that will be rendered.
+        var models = [
+          {
+            name: 'Bear',
+            load: function(model) {
+              stlLoader.load(
+                '{{ url_for('static', filename='bear.stl') }}',
+                function(geometry) {
+                  // Regenerate normals because they aren't loaded properly.
+                  geometry.computeFaceNormals();
+                  geometry.computeVertexNormals();
+                  // Load the model and build mesh.
+                  var mat = new THREE.MeshNormalMaterial( { color:0xff0000, transparent: true, opacity:1} );
+ 
+                  // Load the model and build mesh.
+                  model.model = new THREE.Mesh(geometry, mat);
+                  // Rotate, scale, and move so the bear is facing out the screen.
+                  model.model.rotation.x = -90 * (Math.PI / 180.0);
+                  model.model.scale.set(0.15, 0.15, 0.15);
+                  model.model.position.y = -4;
+                }
+              );
+            }
+          }
+        ];
+
+        // Global state.
+        var bnoData = null;
+        var offset = null;
+        var orientation = null;
+        var objMTLLoader = new THREE.OBJMTLLoader();
+        var stlLoader = new THREE.STLLoader();
+        var currentModel = null;
+
+        // Start with main controls hidden until connected.
+        $('#controls').hide();
+
+        // Setup Three.js scene and camera.
+        var scene = new THREE.Scene();
+        //scene.background = new THREE.color(0xFF0000);
+        var camera = new THREE.PerspectiveCamera(75, sceneWidth / sceneHeight, 0.1, 1000);
+        // Start with the camera moved back a bit to look directly at the origin.
+        camera.position.z = 10;
+
+        // Setup Three.js WebGL renderer and add it to the page.
+        var renderer = new THREE.WebGLRenderer( {alpha:true} );
+        renderer.setSize(sceneWidth, sceneHeight);
+        renderer.setClearColor(0x050B2B, 1);
+        $('#renderer').append(renderer.domElement);
+        $('#renderer canvas').addClass('center-block');  // Center the renderer.
+
+        var material = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+
+        offset = new THREE.Group();
+        orientation = new THREE.Group();
+        offset.add(orientation);
+        scene.add(offset);
+
+        // Main rendering function.
+        function render() {
+          requestAnimationFrame(render);
+          // Switch to the first model once it's loaded.
+          if (currentModel === null) {
+            if (models[0].hasOwnProperty('model')) {
+              currentModel = 0;
+              orientation.add(models[0].model);
+            }
+          }
+          // Update the orientation with the last BNO sensor reading quaternion.
+          if (bnoData !== null) {
+           orientation.quaternion.set(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
+          }
+          renderer.render(scene, camera);
+        }
+        render();
+
+        $.each(models, function(index, model) {
+          $('#model').append($("<option />").val(index).text(model.name));
+          model.load(model);
+        });
+	  
+        // Straighten button click handler.
+        $('#straighten').click(function() {
+          var currentQuat = new THREE.Quaternion(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
+          offset.quaternion.copy(currentQuat.conjugate());
+      });
+      
+        // Updates reading in UI
+        function updateSensorData(data) {
+          bnoData = data;
+          $('#heading').text(data.heading);
+          $('#roll').text(data.roll);
+          $('#pitch').text(data.pitch);
+          // $('#calSys').text(data.calSys);
+          // $('#calGyro').text(data.calGyro);
+          // $('#calAccel').text(data.calAccel);
+          // $('#calMag').text(data.calMag);
+        }
+
+        var server = new EventSource('/bno');
+        server.onmessage = function(e) {
+          // Update BNO sensor values.
+          updateSensorData(JSON.parse(e.data));
+        };
+        server.onopen = function(e) {
+          // Hide connecting & show status
+          $('#connecting').hide();
+          $('#controls').show();
+        };
+        server.onerror = function(e) {
+          $('#controls').hide();
+          $('#connecting').show();
+        };
+      });
+      </script>
+    </body>
+</html>
